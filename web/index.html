@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Реестр вакансий из базы данных</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f6f9; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #007bff; color: white; }
+        tr:hover { background-color: #f1f1f1; }
+    </style>
+</head>
+<body>
+    <h1>📋 Реестр вакансий </h1>
+    <table id="vacancies-table">
+        <thead>
+            <tr><th>Должность</th><th>Компания</th><th>Мин. ЗП</th><th>Макс. ЗП</th><th>Город</th></tr>
+        </thead>
+        <tbody>
+            <tr><td colspan="5">Загрузка данных из базы...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        // Делаем запрос к PostgREST, который проксируется через Nginx
+        fetch('/api/vacancies?order=fetched_at.desc&limit=50')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#vacancies-table tbody');
+                tbody.innerHTML = ''; // Очищаем строку загрузки
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">В базе данных пока нет вакансий.</td></tr>';
+                    return;
+                }
+
+                data.forEach(v => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${v.title || 'Не указана'}</td>
+                        <td>${v.company || 'Не указана'}</td>
+                        <td>${v.salary_min !== null && v.salary_min !== undefined ? v.salary_min : 'Не указана'}</td>
+                        <td>${v.salary_max !== null && v.salary_max !== undefined ? v.salary_max : 'Не указана'}</td>
+                        <td>${v.city || 'Не указан'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                document.querySelector('#vacancies-table tbody').innerHTML = 
+                    '<tr><td colspan="5" style="color:red;">Ошибка загрузки данных из базы данных</td></tr>';
+            });
+    </script>
+</body>
+</html>

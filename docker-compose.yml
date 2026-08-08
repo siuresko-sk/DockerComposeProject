@@ -1,0 +1,133 @@
+services:
+  # 1. Контейнер парсера (ETL)
+  parser:
+    build: ./parser
+    container_name: vacancies_parser_cont
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${POSTGRES_DB}          
+      - DB_USER=${POSTGRES_USER}       
+      - DB_PASSWORD=${POSTGRES_PASSWORD} 
+      - PYTHONUNBUFFERED=1
+    networks:
+      - db_net
+      - internet_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 2. Контейнер базы данных 
+  db:
+    image: postgres:15-alpine
+    container_name: vacancies_db_cont
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}  
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  
+      POSTGRES_DB: ${POSTGRES_DB}  
+    volumes:
+      - db_data:/var/lib/postgresql/data  
+    networks:
+      - db_net                            
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. Контейнер Apache Superset 
+  bi_analytics:
+    build: ./superset                    
+    container_name: superset_cont
+    restart: always
+    ports:
+      - "8088:8088"                       
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+      - DATABASE_DB=${POSTGRES_DB}
+      - DATABASE_HOST=db
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - DATABASE_USER=${POSTGRES_USER}
+      - SUPERSET__SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./superset/init_superset.sh:/app/init_superset.sh 
+      - superset_data:/app/superset_home
+      #- ./superset/dashboards:/app/dashboards 
+    networks:
+      - db_net                            
+    depends_on:
+      db:
+        condition: service_healthy
+    #command: >
+    #  sh -c "
+    #    superset import-dashboards --username admin --path /app/dashboards/dashboard_export.zip || true &&
+    #    superset run -p 8088 --with-threads --reload --debugger
+    #  "
+
+  # 4. Авто-инициализация Superset 
+  superset_init:
+    build: ./superset               
+    container_name: superset_init_cont
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY}
+      - SUPERSET_ADMIN_USER=${SUPERSET_ADMIN_USER}
+      - SUPERSET_ADMIN_PASSWORD=${SUPERSET_ADMIN_PASSWORD}
+      - DATABASE_DB=${POSTGRES_DB}
+      - DATABASE_HOST=db
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - DATABASE_USER=${POSTGRES_USER}
+      - SUPERSET__SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} 
+    volumes:
+      - ./superset/init_superset.sh:/app/init_superset.sh
+      - superset_data:/app/superset_home
+    networks:
+      - db_net
+    entrypoint: ["/bin/sh", "-c", "sh /app/init_superset.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 5. Автоматическое REST API для базы данных (PostgREST) вместо PHP
+  api_gateway:
+    image: postgrest/postgrest:v12.0.2 
+    container_name: api_cont
+    restart: always
+    ports:  
+    - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: postgres  
+    networks:
+      - db_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 6. Веб-сервер Nginx для демонстрации данных через HTML/JS
+  web_server:
+    image: nginx:alpine
+    container_name: nginx_cont
+    restart: always
+    ports:
+      - "8080:80"                      
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - db_net
+      - internet_net
+    depends_on:
+      - api_gateway
+
+volumes:
+  db_data:
+  superset_data:
+
+networks:
+  db_net:
+    driver: bridge                    
+  internet_net:
+    driver: bridge                        

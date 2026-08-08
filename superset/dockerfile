@@ -1,0 +1,18 @@
+FROM apache/superset:latest
+
+# Переключаемся на root, чтобы Debian разрешил установку пакетов
+USER root
+
+# Системно ставим утилиты и драйвер напрямую в виртуальное окружение Superset
+# Устанавливаем pip в виртуальное окружение .venv
+RUN /app/.venv/bin/python -m ensurepip
+
+# Устанавливаем драйвер PostgreSQL в .venv
+RUN /app/.venv/bin/python -m pip install --no-cache-dir psycopg2-binary
+
+#COPY ./dashboards /app/dashboards
+#RUN chmod -R 755 /app/dashboards
+#RUN chown -R superset:superset /app/dashboards
+
+# Возвращаем стандартного пользователя назад для безопасности
+USER superset
