@@ -13,8 +13,8 @@
 git clone https://github.com/siuresko-sk/study_docker/DC_project.git
 cd DC_project
 
-# Создайте файл с переменными окружения
-cp .env.example .env
+# Создайте файл с переменными окружения в корне проекта и добавьте в него настройки подключения (настройки описаны ниже)
+touch .env
 
 # Запустите проект
 docker-compose up -d --build
